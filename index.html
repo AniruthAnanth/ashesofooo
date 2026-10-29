@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ashes of Ooo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #040507; overflow: hidden; }
+  canvas { position: fixed; inset: 0; display: block; }
+  #gl { z-index: 0; }
+  #ui { z-index: 1; cursor: none; }
+  #fatal { display: none; position: fixed; inset: 24px; z-index: 9; margin: 0; padding: 18px; overflow: auto;
+    background: #0b0b0d; color: #e8d3c7; border: 1px solid #6b2a2a; font: 12px/1.5 Menlo, Consolas, monospace; white-space: pre-wrap; }
+  noscript { color: #ccc; font: 14px Menlo, monospace; position: fixed; inset: 40px; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="ui"></canvas>
+<noscript>Ashes of Ooo needs JavaScript and WebGL2.</noscript>
+<script src="src/core.js"></script>
+<script src="src/render.js"></script>
+<script src="src/save.js"></script>
+<script src="src/combat.js"></script>
+<script src="src/lore.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/fx.js"></script>
+<script src="src/world.js"></script>
+<script src="src/rig.js"></script>
+<script src="src/items.js"></script>
+<script src="src/heroes.js"></script>
+<script src="src/enemies.js"></script>
+<script src="src/bosses.js"></script>
+<script src="src/tutorial.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/game.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
