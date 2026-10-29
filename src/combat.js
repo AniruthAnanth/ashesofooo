@@ -295,7 +295,9 @@
       Combat.updateStatuses(a, dt); if (a.dead) return;
       if (a.stats.regen && a.hp < a.maxHp) a.hp = Math.min(a.maxHp, a.hp + a.stats.regen * dt);
       if (a.maxMp > 0 && a.stats.mpRegen) a.mp = Math.min(a.maxMp, a.mp + a.stats.mpRegen * dt);
-      const mul = (a.stats.moveMul || 1) * (1 - (a._slow || 0)) * (a._speedMul || 1);
+      const floats = a.floats || a.ghost || (a.rig && a.rig.def && a.rig.def.float);
+      const wade = !floats && HM.World && HM.World.wadeMul ? HM.World.wadeMul(a.x, a.y) : 1; // wading slows (floaters skim over)
+      const mul = (a.stats.moveMul || 1) * (1 - (a._slow || 0)) * (a._speedMul || 1) * wade;
       let vx = a._stunned ? 0 : a.vx * mul, vy = a._stunned ? 0 : a.vy * mul;
       vx += a.kx; vy += a.ky;
       const decay = Math.exp(-9 * dt); a.kx *= decay; a.ky *= decay;

@@ -292,7 +292,7 @@
   // figure that is clearly IN FRONT is darkened (an arm over the chest gets a crisp edge); (2) crowd breaks — where two
   // figures touch, the BACK figure's cells along the front figure's silhouette are darkened ~35%. Terrain is never touched.
   let OWN = null, OWNK = null, PRT = null, DKS = null, DKT = null, SERIAL = 1;
-  const PBREAK = 3, K_PART = 0.72, K_CROWD = 0.56;
+  const PBREAK = 3, K_PART = 0.72, K_CROWD = 0.65; // crowd break ≈ −35% on the BACK figure (DESIGN §4b)
   const DBG = { frameT: -1, crowd: 0, part: 0 };
   function darken(i, k) {
     if (DKS[i] === OWN[i]) return; DKS[i] = OWN[i]; DKT[i] = k === K_CROWD ? 1 : 2;
@@ -1242,7 +1242,8 @@
     },
     light(a, rig) {
       const f = 0.85 + 0.15 * sin(rig.time * 13) * sin(rig.time * 7.3), hot = BC === BIO.fire;
-      R.light(a.x, a.y, 40, 115 * rig.sc, 1.0, hot ? 0.62 : 0.45, hot ? 0.3 : 0.12, (hot ? 0.55 : 0.85) * f * FIG.alpha);
+      // on fire floors: a dimmer white-gold aura, so she doesn't wash the (orange) fire faction around her into her own hue
+      R.light(a.x, a.y, 40, 115 * rig.sc, 1.0, hot ? 0.8 : 0.45, hot ? 0.5 : 0.12, (hot ? 0.42 : 0.85) * f * FIG.alpha);
     },
     draw(a, rig) {
       const J = rig.J, p = rig.pal, B = rig.B, T = rig.time;
@@ -1657,7 +1658,7 @@
     B: body({ hipZ: 36, thigh: 16, shin: 16, spine: 22, neck: 3, headR: 6.8, shW: 7.4, chestR: 7.6, waistR: 5, armR: 2.6 }),
     pal: { core: [1.0, 0.85, 0.4], tip: [0.9, 0.12, 0.02], body: [1.0, 0.5, 0.12] },
     weapon: { kind: 'none' },
-    light(a, rig) { const f = 0.8 + 0.2 * sin(rig.time * 12) * sin(rig.time * 5.3 + 1); R.light(a.x, a.y, 40, 110 * rig.sc, 1.0, 0.42, 0.1, 0.9 * f * FIG.alpha); },
+    light(a, rig) { const f = 0.8 + 0.2 * sin(rig.time * 12) * sin(rig.time * 5.3 + 1); R.light(a.x, a.y, 40, 110 * rig.sc, 1.0, 0.42, 0.1, (BC === BIO.fire ? 0.62 : 0.9) * f * FIG.alpha); }, // dimmer on the (already lit) fire floors: a pack doesn't wash into one orange blob
     draw(a, rig) {
       const J = rig.J, p = rig.pal, B = rig.B, T = rig.time;
       const fl = 0.8 + 0.2 * sin(T * 11 + rig.seed);
@@ -1680,19 +1681,21 @@
   DEFS.cinder = {
     H: 40, kind: 'quad', death: 'ember', runSpeed: 150, shadow: [16, 7], turn: 11,
     B: { bodyZ: 22, len: 24, bodyR: 7, neck: 8, headR: 5, w: 4.4, upper: 11, lower: 12, legR: 2.6, stride: 54, liftH: 6, bob: 1.5 },
-    pal: { body: [0.28, 0.16, 0.11], head: [0.32, 0.18, 0.12], bone: [0.95, 0.5, 0.2], eye: [1.4, 0.9, 0.3], eyeE: 1.2, ember: [1.0, 0.45, 0.1] }, main: ['body'],
+    // cooled-basalt body (slate, not brown): under its own ember light it stays a charcoal shape with glowing coals,
+    // so the fire faction never melts into the orange ground glow or into Flame Princess's white-gold
+    pal: { body: [0.25, 0.22, 0.29], head: [0.29, 0.25, 0.32], bone: [0.95, 0.5, 0.2], eye: [1.4, 0.9, 0.3], eyeE: 1.2, ember: [1.0, 0.45, 0.1] }, main: ['body'],
     pose: poseQuad,
     init(rig) { rig.tail = sheet(1, 5, 4.4, { grav: -0.2, damp: 0.86, stiff: 0.2 }); },
     sim: quadTailSim,
-    light(a, rig) { R.light(a.x, a.y, 24, 70 * rig.sc, 1.0, 0.4, 0.1, (0.55 + 0.15 * sin(rig.time * 9)) * FIG.alpha); },
+    light(a, rig) { R.light(a.x, a.y, 24, 70 * rig.sc, 1.0, 0.4, 0.1, (BC === BIO.fire ? 0.7 : 1) * (0.55 + 0.15 * sin(rig.time * 9)) * FIG.alpha); },
     draw(a, rig) { drawQuad(a, rig, { ramp: RP.coal, pat: PAT_COALS, p2: rig.pal.ember, claw: rig.pal.ember, tailTip: [1, 0.5, 0.15], glowC: [1.2, 0.6, 0.2] }); },
   };
   DEFS.brute = {
     H: 112, death: 'ember', gait: 'stomp', runSpeed: 75, shadow: [18, 9], flinchK: 0.4, turn: 7,
     B: body({ hipZ: 40, thigh: 18, shin: 18, spine: 30, neck: 1, headR: 6.5, shW: 16, hipW: 7, upper: 22, fore: 22, chestR: 14, waistR: 10, armR: 6, legR: 6, stride: 54, liftH: 5, bob: 3, armSwing: 8, reach: 22, hunch: 0.55, headPitch: -0.3, headFwd: 5 }),
-    pal: { body: [0.25, 0.17, 0.15], crack: [1.0, 0.42, 0.08], eye: [1.4, 0.8, 0.2] }, main: ['body'],
+    pal: { body: [0.25, 0.22, 0.28], crack: [1.0, 0.42, 0.08], eye: [1.4, 0.8, 0.2] }, main: ['body'], // basalt + lava cracks (see cinder)
     weapon: { kind: 'fists' },
-    light(a, rig) { R.light(a.x, a.y, 50, 120 * rig.sc, 1.0, 0.38, 0.08, (0.55 + 0.12 * sin(rig.time * 6)) * FIG.alpha); },
+    light(a, rig) { R.light(a.x, a.y, 50, 120 * rig.sc, 1.0, 0.38, 0.08, (BC === BIO.fire ? 0.7 : 1) * (0.55 + 0.12 * sin(rig.time * 6)) * FIG.alpha); },
     draw(a, rig) {
       const J = rig.J, p = rig.pal, B = rig.B;
       FIG.pat = PAT_COALS; FIG.p2 = p.crack;
@@ -2468,7 +2471,8 @@
       FIG.n = 0; FIG.minKey = Infinity; FIG.pat = 0; FIG.p2 = null; FIG.T = T; FIG.seed = (a.id || 0) * 13; FIG.part = 1; FIG.hold = 0;
       // dither anchor = the figure's own origin cell (the pattern rides with the figure); biome tones + contrast gain
       FIG.oci = floor(a.x / CW); FIG.ocj = floor((a.y * TILT - (a.z || 0)) / CH);
-      BC = BIO[biomeId()]; FIG.dk = 1; FIG.mr = 0; FIG.sat = def.sat || 1; FIG.so = 0.14 + (BC.so || 0); // so: shading offset (ice: broader navy shadow side) FIG.gain = a.dead ? 1 : figureGain(a, rig);
+      BC = BIO[biomeId()]; FIG.dk = 1; FIG.mr = 0; FIG.sat = def.sat || 1; FIG.so = 0.14 + (BC.so || 0); // so: shading offset (ice: broader navy shadow side)
+      FIG.gain = a.dead ? 1 : figureGain(a, rig);
       FIG.flash = a.flashT > 0 && !a.dead ? clamp(a.flashT / 0.06, 0, 1) : 0;
       FIG.alpha = 1; FIG.dis = 0; FIG.unlit = 0; FIG.clipPy = Infinity; FIG.ta = 0; FIG.rim = 0;
       // status tints (strongest wins)
@@ -2484,6 +2488,10 @@
       }
       if (a.isElite && !a.dead) { const c = a.rimColor || a.eliteColor || [1.0, 0.55, 0.2]; FIG.rim = 0.55 + 0.3 * sin(T * 4.5 + rig.seed); FIG.rr = c[0]; FIG.rg = c[1]; FIG.rb = c[2]; }
       if ((a.z || 0) < -0.5 || (rig.st === 'spawn' && def.bony)) FIG.clipPy = a.y * TILT + 3;
+      else if (!a.dead && !def.float && !a.floats && !a.ghost && (a.z || 0) < 4 && HM.World && HM.World.wadeAt) { // wading: the waterline swallows the legs
+        const w = HM.World.wadeAt(a.x, a.y);
+        if (w) FIG.clipPy = a.y * TILT - (a.height || 70) * (w === 2 ? 0.36 : 0.2) + Math.sin(T * 2.2 + rig.seed) * 0.8;
+      }
       // ---- death states
       let showBody = true;
       if (a.dead) {

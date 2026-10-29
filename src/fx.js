@@ -66,6 +66,7 @@
     // internal extras
     flame:     { g: "^*'\"`.", c: [[2.6, 2.1, 1.1], [1.9, 0.9, 0.22], [1.0, 0.28, 0.05]], e: 1.0, gr: -130, dr: 2.5, wd: 0.5, sp: [4, 22], up: [40, 90], lf: [0.22, 0.5], gd: 0 },
     snow:      { g: "*'.", c: [[1.0, 1.15, 1.35], [0.7, 0.85, 1.05], [0.4, 0.5, 0.65]], e: 0.25, gr: 28, dr: 2, wd: 1, sp: [4, 20], up: [-10, 10], lf: [0.6, 1.3], gd: 0 },
+    splash:    { g: "o'.'.", c: [[1.45, 1.7, 2.0], [0.85, 1.05, 1.35], [0.35, 0.45, 0.6]], e: 0.45, gr: 560, dr: 1.1, wd: 0.2, sp: [25, 95], up: [80, 190], lf: [0.35, 0.7], gd: 0 },
     glint:     { g: "+*'.", c: [[2.0, 2.0, 2.2], [1.2, 1.2, 1.4], [0.5, 0.5, 0.6]], e: 0.9, gr: 0, dr: 4, wd: 0, sp: [0, 15], up: [0, 15], lf: [0.2, 0.45], gd: 0 },
   };
   const PRE = [], PRE_ID = {};
@@ -501,6 +502,7 @@
       else if (m !== 'dust' || rand() < 0.5) FX.burst(x, y, z, m, Math.round(n * (m === 'bone' ? 0.5 : 0.7)), { dir, spread: 0.9, speed: 0.8, zr: 8 });
       const lc = TYPE_LIGHT[type];
       if (lc) FX.light(x, y, z, 55, lc, 0.9, 0.12);
+      if (!info.isDot && amt > 2 && !(target.z > 4)) FX.splash(target.x, target.y, 0.3 + Math.min(0.7, amt / 45)); // struck while wading
       if (crit) {
         flashes.push({ x, y, z, t: 0, dur: 0.1, size: target.isBoss ? 4 : 3, color: [2.6, 2.5, 2.2] });
         FX.light(x, y, z, 70, [1, 0.95, 0.8], 1.2, 0.1);
@@ -576,8 +578,18 @@
       fissures.push(f);
       return f;
     },
+    // splash(x,y,strength=1) — droplets + a World ripple ring when (x,y) is on water (HM.World.isWater); else no-op → false
+    splash(x, y, s) {
+      const W = HM.World; if (!W || typeof W.isWater !== 'function' || !W.isWater(x, y)) return false;
+      s = s === undefined ? 1 : Math.max(0.2, Math.min(2.5, s));
+      FX.burst(x, y, 2, 'splash', Math.round(5 + 8 * s), { speed: 0.55 + 0.45 * s, up: 0.65 + 0.45 * s, r: 3 + 4 * s });
+      FX.burst(x, y, 1, 'splash', Math.round(3 + 3 * s), { speed: 1.2 + 0.5 * s, up: 0.25, r: 2 });
+      if (typeof W.ripple === 'function') safe(W.ripple, x, y, { strength: Math.min(1, 0.45 + 0.3 * s), maxR: 40 + 45 * s, life: 1.2 + 0.4 * s });
+      return true;
+    },
     explosion(x, y, r, kind) {
       r = r || 40; const K = EXPL[kind] || EXPL.fire;
+      FX.splash(x, y, Math.min(2.2, r / 34));
       const s = 0.8 + r / 70;
       FX.burst(x, y, 6, K.p1, Math.round(10 + r * 0.45), { speed: s, up: 1 + r / 90, r: r * 0.2, zr: 6 });
       FX.burst(x, y, 6, K.p2, Math.round(5 + r * 0.2), { speed: s * 1.1, r: r * 0.15 });
@@ -809,34 +821,42 @@
     const fin = T.done ? Math.max(0, 1 - (T.t - T.dur) / 0.14) : 0; // detonation flash
     const fadeIn = Math.min(1, T.t / 0.08);
     const cr = c[0], cg = c[1], cb = c[2];
-    const er = cr * 0.45 + 0.8, eg = cg * 0.45 + 0.8, eb = cb * 0.45 + 0.8; // outline: whiter dotted ring
-    const pulse = 0.8 + 0.2 * Math.sin(T.t * (8 + k * 14));
-    const ob = (1.1 + 0.5 * k) * pulse * fadeIn + fin;
+    // High-contrast style that reads on every biome (bright ice/snow included): a bright, near-white dotted rim,
+    // a dark band just inside it (the rim pops against busy ground), a dimmed + tinted interior and a bright filling sweep.
+    const er = cr * 0.5 + 0.95, eg = cg * 0.5 + 0.95, eb = cb * 0.5 + 0.95; // outline: whiter dotted ring
+    const pulse = 0.82 + 0.18 * Math.sin(T.t * (8 + k * 14));
+    const ob = (1.45 + 0.6 * k) * pulse * fadeIn + fin;
     const col = R.col;
-    // interior cell. u = 0..1 fill coordinate of the cell (fills where u <= k)
-    const cell = (i, ci, cj, u) => {
+    // interior cell. u = 0..1 fill coordinate of the cell (fills where u <= k); band = cell in the dark inner rim band
+    const cell = (i, ci, cj, u, band) => {
+      if (band && fin <= 0) {
+        const b = (u <= k ? 0.3 : 0.1) * fadeIn;
+        R.setI(i, GL.dot, cr * b, cg * b, cb * b, KEY_TELE, F_UNLIT);
+        return;
+      }
       if (u <= k || fin > 0) {
         const front = !T.done && u > k - 0.09;
         let g, b;
-        if (front) { g = ((ci + cj) & 1) ? GL.O : GL.o; b = 1.15; }
-        else if (((ci + 2 * cj) & 3) === 0) { g = GL.o; b = 0.5; }
-        else { g = GL.dot; b = 0.36; }
+        if (front) { g = ((ci + cj) & 1) ? GL.O : GL.o; b = 1.5; }
+        else if (((ci + 2 * cj) & 3) === 0) { g = GL.o; b = 0.6; }
+        else { g = GL.dot; b = 0.42; }
         b = (b * (0.65 + 0.35 * k) + fin * 1.1) * fadeIn;
-        if (R.setI(i, g, cr * b, cg * b, cb * b, KEY_TELE, F_UNLIT)) R.emitI(i, cr * 0.09 * b, cg * 0.09 * b, cb * 0.09 * b);
-      } else { // not yet filled: tint whatever is there toward the warning colour
-        const o = i * 3, m = 0.28 * fadeIn;
-        col[o] += (cr * 0.5 - col[o]) * m; col[o + 1] += (cg * 0.5 - col[o + 1]) * m; col[o + 2] += (cb * 0.5 - col[o + 2]) * m;
+        if (R.setI(i, g, cr * b, cg * b, cb * b, KEY_TELE, F_UNLIT)) R.emitI(i, cr * 0.1 * b, cg * 0.1 * b, cb * 0.1 * b);
+      } else { // not yet filled: dim whatever is there and tint it toward the warning colour
+        const o = i * 3, m = 0.4 * fadeIn;
+        col[o] += (cr * 0.4 - col[o]) * m; col[o + 1] += (cg * 0.4 - col[o + 1]) * m; col[o + 2] += (cb * 0.4 - col[o + 2]) * m;
       }
     };
     if (T.shape === 'circle' || T.shape === 'ring') {
-      const rIn = T.shape === 'ring' ? T.r0 / T.r : 0;
-      R.ellipse(T.x, T.y, T.r, T.r, (i, u, ci, cj) => { if (u >= rIn) cell(i, ci, cj, rIn > 0 ? (u - rIn) / (1 - rIn) : u); });
+      const rIn = T.shape === 'ring' ? T.r0 / T.r : 0, bU = 1 - 7.5 / Math.max(12, T.r);
+      R.ellipse(T.x, T.y, T.r, T.r, (i, u, ci, cj) => { if (u >= rIn) cell(i, ci, cj, rIn > 0 ? (u - rIn) / (1 - rIn) : u, u > bU); });
       teleArc(T.x, T.y, T.r, 0, TAU, ob, er, eg, eb, cr, cg, cb);
       if (rIn > 0) teleArc(T.x, T.y, T.r0, 0, TAU, ob * 0.8, er, eg, eb, cr, cg, cb);
       R.light(T.x, T.y, 0, T.r * 1.2, cr, cg * 0.8, cb * 0.8, 0.12 + 0.33 * k + fin);
     } else if (T.shape === 'cone') {
       const L = T.len, half = T.half;
-      R.ellipse(T.x, T.y, L, L, (i, u, ci, cj, ang) => { if (Math.abs(M.angleDiff(T.ang, ang)) <= half) cell(i, ci, cj, u); });
+      const bU = 1 - 7.5 / Math.max(12, L);
+      R.ellipse(T.x, T.y, L, L, (i, u, ci, cj, ang) => { const da = half - Math.abs(M.angleDiff(T.ang, ang)); if (da >= 0) cell(i, ci, cj, u, u > bU || da * u * L < 5.5); });
       teleArc(T.x, T.y, L, T.ang - half, T.ang + half, ob, er, eg, eb, cr, cg, cb);
       teleSeg(T.x, T.y, T.x + Math.cos(T.ang - half) * L, T.y + Math.sin(T.ang - half) * L, ob, er, eg, eb, cr, cg, cb);
       teleSeg(T.x, T.y, T.x + Math.cos(T.ang + half) * L, T.y + Math.sin(T.ang + half) * L, ob, er, eg, eb, cr, cg, cb);
@@ -865,7 +885,7 @@
               continue;
             }
           }
-          cell(i, ci, cj, u);
+          cell(i, ci, cj, u, hw - Math.abs(across) < 5.5 || along < 4 || L - along < 4);
         }
       }
       const nx = -sa * hw, ny = ca * hw;

@@ -1094,6 +1094,7 @@
       if (!C.hostile(a, 0) || a === exclude) continue;
       const dp = M.dist(p.x, p.y, a.x, a.y); if (dp > 240) continue;
       const dc = M.dist(ax, ay, a.x, a.y);
+      if (a.neutral && dc > 20) continue; // never auto-lock onto the unpossessed Waving Snail
       const score = dc < 110 ? dc : 110 + dp; // prefer what's under the cursor, else what's nearest to her
       if (score < bs) { bs = score; best = a; }
     }

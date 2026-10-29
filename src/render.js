@@ -47,7 +47,8 @@
     // figure/ground separation
     groundDim: 0.64,             // terrain albedo multiplier (background recedes)
     groundDesat: 0.32,           // terrain desaturation toward luminance
-    figureLift: 1.22,            // figure albedo multiplier
+    figureLift: 1.22,
+    figureLightTint: 0.5,        // figures take less colour from point lights than terrain (fire crowds stay separable)            // figure albedo multiplier
     rimK: 1.35,                  // brightness boost on figure silhouette edge cells
     outline: true,               // thin soft shadow on terrain touching figures
     outlineDark: 0.42,           // brightness of terrain cells touching a figure (1 = no outline)
@@ -333,7 +334,7 @@
         if (!(fl & F_UNLIT)) {
           const s = 1 - shd[i] * ((fl & F_GROUND) ? ss : ss * 0.45);
           const lum = r * 0.3 + g * 0.55 + b * 0.15;
-          const t = lum * tint + (R.glyph[i] ? 0.015 : 0);
+          const t = lum * ((fl & F_FIGURE) ? tint * R.figureLightTint : tint) + (R.glyph[i] ? 0.015 : 0);
           r = r * ar * s + Lr * t; g = g * ag * s + Lg * t; b = b * ab * s + Lb * t;
         }
         out[q] = r + emi[o]; out[q + 1] = g + emi[o + 1]; out[q + 2] = b + emi[o + 2]; out[q + 3] = 1;
@@ -367,6 +368,7 @@
         const d = R._wd && R._wd.length === n ? R._wd : (R._wd = new Float32Array(n));
         const ax = CW / CH, BIG = 1e4;
         for (let i = 0; i < n; i++) d[i] = m[i] ? BIG : 0;
+        for (let x = 0; x < cols; x++) { d[x] = 0; d[(rows - 1) * cols + x] = 0; } for (let y = 0; y < rows; y++) { d[y * cols] = 0; d[y * cols + cols - 1] = 0; } // view border counts as shore: keep the moon on screen
         for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) { const i = y * cols + x; if (!d[i]) continue; let v = d[i]; if (x > 0) v = Math.min(v, d[i - 1] + ax); if (y > 0) v = Math.min(v, d[i - cols] + 1); d[i] = v; }
         let best = -1, bv = 0;
         for (let y = rows - 1; y >= 0; y--) for (let x = cols - 1; x >= 0; x--) {
@@ -374,7 +376,7 @@
           if (x < cols - 1) v = Math.min(v, d[i + 1] + ax); if (y < rows - 1) v = Math.min(v, d[i + cols] + 1); d[i] = v;
           const score = Math.min(v, BIG / 2) + y * 0.04 - Math.abs(x - cols * 0.6) * 0.01; if (score > bv) { bv = score; best = i; }
         }
-        if (best >= 0 && d[best] >= 4.5 && d[best] < BIG / 2) R._moonT = [best % cols, Math.floor(best / cols), Math.min(d[best] * 0.85, rows * 0.1)];
+        if (best >= 0 && d[best] >= 8 && d[best] < BIG / 2) R._moonT = [best % cols, Math.floor(best / cols), Math.min(d[best] * 0.7, rows * 0.13)]; // only open water gets the moon (never small ponds)
       }
       return m;
     },
@@ -386,6 +388,7 @@
       // moon disc (screen-anchored), radius in rows; cells are CH/CW taller than wide
       // moon glides toward the deepest visible water (world-anchored target, smoothed)
       const mt = R._moonT; let mry = 0, mcx = 0, mcy = 0;
+      if (!mt && R._moon) { R._moon[2] *= 0.94; if (R._moon[2] > 2.2) { mcx = R._moon[0] - R.ci0; mcy = R._moon[1] - R.cj0; mry = R._moon[2]; } else R._moon = null; }
       if (mt) {
         const tx = R.ci0 + mt[0], ty = R.cj0 + mt[1];
         if (!R._moon || R._moonFloor !== R._wmFloor) { R._moon = [tx, ty, mt[2]]; R._moonFloor = R._wmFloor; }
@@ -403,7 +406,7 @@
         for (let y = 0; y < rows; y++) {
           const i = y * cols + x;
           if (!wm[i]) { shore = y; continue; }
-          if (key[i] > -1e6) continue; // something stands/draws on this water cell (wading figure, particle)
+          if (key[i] > -1e6) { if (flag[i] & F_FIGURE) shore = y; continue; } // a wading figure: its feet become the mirror line
           const wob = Math.sin(t * 1.9 + y * 0.85) * 0.75 + Math.sin(t * 0.8 + y * 0.27 + x * 0.02) * 0.5;
           const broken = Math.sin(t * 2.4 + y * 1.7 + x * 0.09) > 0.9; // ripple breaks in the image
           const o = i * 3;
@@ -424,18 +427,35 @@
               }
             }
           }
-          // 2) sky: moon disc
-          const mdx = (x + wob - mcx) / mrx, mdy = (y - mcy) / mry, mr2 = mdx * mdx + mdy * mdy;
+          // 2) sky: moon disc — crisp full moon: limb-darkened highlands, dark seas, rimmed craters, ordered dither
+          //    anchored to the moon (stable), slight row wobble, slow dark ripple bands rolling down through it
+          const mwob = wob * 0.45;
+          const mdx = (x - mwob - mcx) / mrx, mdy = (y - mcy) / mry, mr2 = mdx * mdx + mdy * mdy;
           let sky = 0, g = 0, cr = 0, cgc = 0, cb = 0;
-          if (mry > 2 && mr2 < 1 && !broken) {
-            const limb = 0.55 + 0.45 * Math.sqrt(1 - mr2);
-            const mare = M.fbm(mdx * 2.1 + 7.3, mdy * 2.1 - 3.1, 3);         // dark seas
-            const crat = M.hash2(Math.floor((mdx + 1) * 9), Math.floor((mdy + 1) * 6)) < 0.12 ? 0.7 : 1; // pocks
-            let b = limb * (mare > 0.55 ? 0.55 : 1) * crat;
-            b *= 0.85 + 0.15 * Math.sin(t * 0.7 + y * 0.6); // shimmer
-            const gi = Math.min(MOON.length - 1, Math.max(1, Math.round(b * (MOON.length - 1) + (M.hash2(x, y) - 0.5) * 1.2)));
-            g = MOON[gi]; sky = b; cr = 0.78 * b; cgc = 0.8 * b; cb = 0.88 * b;
-            emi[o] += 0.02 * b; emi[o + 1] += 0.02 * b; emi[o + 2] += 0.025 * b;
+          if (mry > 2 && mr2 < 1.55) {
+            const band = Math.sin(t * 1.1 - y * 0.55) > 0.93; // ripple band crossing the reflection
+            if (mr2 < 1) {
+              if (!band) {
+                const nz = Math.sqrt(1 - mr2), limb = 0.62 + 0.38 * nz;
+                const mf = M.fbm(mdx * 1.55 + 3.1, mdy * 1.55 - 1.7, 4);
+                const maria = mf < 0.5 ? 0 : mf > 0.6 ? 1 : (mf - 0.5) * 10;
+                let tone = limb * (1 - 0.48 * maria);
+                for (let c = 0; c < CRATERS.length; c += 3) {
+                  const du = mdx - CRATERS[c], dv = mdy - CRATERS[c + 1], cd = Math.sqrt(du * du + dv * dv), rr = CRATERS[c + 2];
+                  if (cd < rr) tone *= 0.66; else if (cd < rr + 0.05) tone *= 1.18;
+                }
+                if (mr2 > 0.86) tone *= 1.1; // bright crisp rim
+                const bx = (x - Math.floor(mcx)) & 3, by = (y - Math.floor(mcy)) & 3;
+                let lv = Math.floor(tone * 5.2 + BAYER4[by * 4 + bx]); lv = lv < 0 ? 0 : lv > 5 ? 5 : lv;
+                g = MOONG[lv]; const v = 0.38 + lv * 0.11;
+                cr = v * 0.95; cgc = v * 0.97; cb = v * 1.05; sky = 1;
+                emi[o] += 0.035 * tone; emi[o + 1] += 0.036 * tone; emi[o + 2] += 0.042 * tone;
+              }
+            } else if (!broken) { // soft halo of moonlit glints around the disc
+              const h = 1 - (mr2 - 1) / 0.55;
+              emi[o] += 0.02 * h; emi[o + 1] += 0.021 * h; emi[o + 2] += 0.026 * h;
+              if (M.hash2(x * 5 + Math.floor(t * 2), y * 3) < 0.12 * h) { g = MOONG[0]; cr = cgc = 0.45 * h + 0.2; cb = cr * 1.08; sky = 1; }
+            }
           }
           // 3) sky: drifting clouds (in front of the moon)
           const fx = x / SX, fy = y / SY, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, g0 = iy * gw + ix;
@@ -649,6 +669,9 @@
     const ia = LUT[a.charCodeAt(0)], ib = LUT[b.charCodeAt(0)]; MIRROR[ia] = ib; if (b !== '-' && b !== '|' && a !== '!') MIRROR[ib] = ia;
   }
   const MOON = (() => { const r = new Uint8Array(10); ' .:-=+*#%@'.split('').forEach((c, i) => (r[i] = LUT[c.charCodeAt(0)])); return r; })();
+  const MOONG = (() => { const r = new Uint8Array(6); '.:=%#@'.split('').forEach((c, i) => (r[i] = LUT[c.charCodeAt(0)])); return r; })();
+  const BAYER4 = new Float32Array([0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => v / 16 - 0.47));
+  const CRATERS = new Float32Array([0.28, 0.42, 0.13, -0.38, -0.22, 0.1, 0.06, -0.52, 0.07, -0.52, 0.36, 0.06, 0.48, -0.12, 0.08, -0.08, 0.12, 0.05]); // u, v, r
   const CLOUD = (() => { const r = new Uint8Array(6); '.,:;~='.split('').forEach((c, i) => (r[i] = LUT[c.charCodeAt(0)])); return r; })();
   const DIR_H = LUT['-'.charCodeAt(0)], DIR_V = LUT['|'.charCodeAt(0)], DIR_BS = LUT['\\'.charCodeAt(0)], DIR_FS = LUT['/'.charCodeAt(0)];
 

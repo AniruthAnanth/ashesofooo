@@ -3120,7 +3120,7 @@
     // hovered enemy (for crosshair + target frame)
     let hov = null, hd = Infinity;
     for (const a of Gm.entities) {
-      if (a.dead || a.team !== 1 || !R.inViewWorld(a.x, a.y, 60)) continue;
+      if (a.dead || a.team !== 1 || a.neutral || a.hidden || !R.inViewWorld(a.x, a.y, 60)) continue; // the unpossessed Waving Snail is not a foe
       const hgt = (a.height || 50) + (a.z || 0);
       const mid = R.worldToScreen(a.x, a.y, hgt * 0.5);
       const rx = Math.max(12 * S, (a.radius || 9) * R.zoomX * 1.5), ry = Math.max(14 * S, hgt * 0.55 * R.zoomY);

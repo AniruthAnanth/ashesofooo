@@ -841,9 +841,9 @@
     const sp = o.speed || 240, p = player();
     return C.projectile({ x, y, z, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: o.r || 7, team: 1, life: o.life || 2.6,
       look: o.look || 'bolt', color: o.color || [1, 1, 1], source: owner, light: o.light || null,
-      damage: { amount: owner.D(o.dmg || 1), type: o.type || 'phys', knock: o.knock || 70, status: o.status || null, canCrit: false, hitstop: 0.04 },
+      damage: { amount: owner.D(o.dmg || 1), type: o.type || 'phys', knock: o.knock || 70, status: o.status || null, canCrit: false, hitstop: 0.04, tags: ['boss', 'pat:' + patOf(owner)] },
       homing: o.homing && p ? { target: p, turn: o.homing } : null,
-      onExpire: (pr) => callFx('burst', pr.x, pr.y, pr.z, o.burst || 'spark', 6) });
+      onExpire: (pr) => { callFx('burst', pr.x, pr.y, pr.z, o.burst || 'spark', 6); if (pr.z < 30) callFx('splash', pr.x, pr.y, 0.6); } });
   }
 
   // ---- summons (via HM.Enemies.spawn, guarded)
@@ -1006,7 +1006,7 @@
       this.maxHp = this.hp = Math.round(def.hp * Math.pow(fi / (def.act * 3), 1.2) * (1 + 0.22 * asc) * T.hpMul);
       // damage grows per floor more gently than it used to (+14%/floor outran hero HP growth; late bosses deal mostly
       // fire/shadow, which armor does not soak) — see tools/tests/boss_balance.js
-      this.dmgUnit = def.dmg * (1 + T.floorDmg * (fi - 3)) * (1 + 0.1 * asc) * T.dmgMul;
+      this.dmgUnit = def.dmg * (1 + T.floorDmg * (fi - 3)) * (1 + 0.1 * asc) * T.dmgMul * ((T.bossDmg && T.bossDmg[def.id]) || 1);
       this.speedAsc = 1 + 0.03 * asc;
       this.radius = def.radius; this.height = def.height; this.mass = def.mass; this.speed = def.speed;
       this.stats.armor = def.armor || 0; Object.assign(this.stats.res, def.res || {});
@@ -1626,7 +1626,7 @@
     b.pose('cast', 'summon', b.w(1));
     sfx('wenk', { x: b.x, y: b.y });
     bark(b, pick(b.def.lines.penguins), 2);
-    summon(b, 'penguin', b.phase >= 3 ? 4 : 3, { cap: 6, color: COL.ice, burst: 'ice', sfx: 'wenk' });
+    summon(b, 'penguin', b.phase >= 3 ? 4 : 3, { cap: 6, color: COL.ice, burst: 'ice', sfx: 'wenk', dmgMul: 0.4 });
     yield b.w(1.2);
   };
   IK.blizzard = function* (b) {
@@ -1689,7 +1689,7 @@
     b.tele({ shape: 'circle', x: cx, y: cy, r, dur: wind, color: COL.fire });
     b.strike('overhead', wind);
     yield wind;
-    hurt(b, (a) => M.dist(cx, cy, a.x, a.y) <= r + a.radius * 0.5, { amount: b.D(1.5), type: 'fire', knock: 320, hitstop: 0.08, shake: 9, status: [{ id: 'burn', dur: 3, dps: b.D(0.08) }] }, null, cx, cy);
+    hurt(b, (a) => M.dist(cx, cy, a.x, a.y) <= r + a.radius * 0.5, { amount: b.D(1.5), type: 'fire', knock: 320, hitstop: 0.08, shake: 9, status: [{ id: 'burn', dur: 3, dps: b.D(0.05) }] }, null, cx, cy);
     blast(b, cx, cy, r, 'fire'); callFx('decal', cx, cy, 'scorch', r, 10);
     elemZone(b, cx, cy, 46, 3.5, b.D(0.4), 'fire');
     sfx('explode', { x: cx, y: cy }); shakeAt(cx, cy, 8);
@@ -1713,7 +1713,7 @@
         for (const q of pts || []) {
           const x = Array.isArray(q) ? q[0] : q.x, y = Array.isArray(q) ? q[1] : q.y;
           if (x === undefined) continue;
-          hurt(b, (a) => M.dist(x, y, a.x, a.y) <= 16 + a.radius * 0.5, { amount: b.D(1.3), type: 'fire', knock: 220, hitstop: 0.07, shake: 7, status: [{ id: 'burn', dur: 3, dps: b.D(0.09) }] }, once, x, y);
+          hurt(b, (a) => M.dist(x, y, a.x, a.y) <= 16 + a.radius * 0.5, { amount: b.D(1.15), type: 'fire', knock: 220, hitstop: 0.07, shake: 7, status: [{ id: 'burn', dur: 3, dps: b.D(0.05) }] }, once, x, y);
         }
       });
       sfx('explode', { x: b.x, y: b.y }); shakeAt(b.x, b.y, 7);
@@ -1726,11 +1726,11 @@
     if (HM.rng.next() < 0.5) bark(b, pick(b.def.lines.meteors), 1.8);
     sfx('fire', { x: b.x, y: b.y, pitch: 0.6 });
     yield b.w(0.35);
-    const n = [8, 11, 14][b.phase - 1];
+    const n = [6, 8, 10][b.phase - 1];
     for (let i = 0; i < n; i++) {
       const p = b.tgt();
       const q = i % 3 === 0 ? [p.x + (p.vx || 0) * 0.4, p.y + (p.vy || 0) * 0.4] : i % 3 === 1 ? arenaPoint(b, p.x, p.y, 100, 260) : arenaPoint(b);
-      meteor(b, q[0], q[1], { r: 52, dur: b.tw(1.25), dmg: 1.3, zone: 3 });
+      meteor(b, q[0], q[1], { r: 52, dur: b.tw(1.25), dmg: 0.95, zone: 2, status: [{ id: 'burn', dur: 2, dps: b.D(0.05) }] });
       yield b.w(0.17);
     }
     yield b.w(0.7);
@@ -1745,7 +1745,7 @@
     for (let i = 0; i < n; i++) {
       g0 += rnd(-0.35, 0.35);
       const gaps = [{ a: g0, h: 0.24 }, { a: g0 + Math.PI + rnd(-0.6, 0.6), h: 0.24 }];
-      wave(b, { x: b.x, y: b.y, r0: b.radius + 6, r1: 640, speed: 190 + 20 * b.phase, band: 24, style: 'lava', gaps, dmg: { amount: b.D(0.95), type: 'fire', knock: 200, hitstop: 0.05, shake: 5, status: [{ id: 'burn', dur: 2.5, dps: b.D(0.08) }] } });
+      wave(b, { x: b.x, y: b.y, r0: b.radius + 6, r1: 640, speed: 190 + 20 * b.phase, band: 24, style: 'lava', gaps, dmg: { amount: b.D(0.75), type: 'fire', knock: 200, hitstop: 0.05, shake: 5, status: [{ id: 'burn', dur: 2.5, dps: b.D(0.05) }] } });
       sfx('explode', { x: b.x, y: b.y, vol: 0.7, pitch: 0.7 }); shakeAt(b.x, b.y, 5);
       if (i < n - 1) { b.pose('attack', 'slam', b.w(0.6)); yield b.w(1.0); }
     }
@@ -1765,20 +1765,20 @@
   FK.hounds = function* (b) {
     b.pose('cast', 'summon', b.w(1));
     bark(b, pick(b.def.lines.hounds), 1.8);
-    summon(b, 'cinder', b.phase >= 3 ? 3 : 2, { cap: 4, color: COL.fire, burst: 'ember', sfx: 'fire' });
+    summon(b, 'cinder', b.phase >= 3 ? 3 : 2, { cap: 4, color: COL.fire, burst: 'ember', sfx: 'fire', dmgMul: 0.22 });
     yield b.w(1.2);
   };
 
   // ---------------------------------------------------------------- THE LICH (Act V)
   LI.witchfire = function* (b) {
-    const p = b.tgt(), base = M.angle(b.x, b.y, p.x, p.y), n = [3, 5, 7][b.phase - 1], spread = 0.35 + 0.12 * n;
+    const p = b.tgt(), base = M.angle(b.x, b.y, p.x, p.y), n = [3, 4, 5][b.phase - 1], spread = 0.35 + 0.12 * n;
     const wind = b.tw(0.5);
     b.pose('cast', 'forward', wind + 0.25);
     b.tele({ shape: 'cone', x: b.x, y: b.y, ang: base, half: spread / 2, r: 120, dur: wind, color: COL.witch });
     yield wind;
     for (let k = 0; k < n; k++) {
       const a = base - spread / 2 + (n === 1 ? 0.5 : k / (n - 1)) * spread;
-      bolt(b, b.x, b.y, 60, a, { look: 'witchfire', speed: 205, dmg: 0.85, type: 'shadow', color: COL.witch, homing: 1.05 + 0.15 * b.phase, life: 3.2, burst: 'witchfire', light: [70, 0.3, 1, 0.45] });
+      bolt(b, b.x, b.y, 60, a, { look: 'witchfire', speed: 205, dmg: 0.7, type: 'shadow', color: COL.witch, homing: 0.85 + 0.12 * b.phase, life: 3.2, burst: 'witchfire', light: [70, 0.3, 1, 0.45] });
     }
     sfx('fireball', { x: b.x, y: b.y, pitch: 0.7 });
     yield b.w(0.9);
@@ -1822,7 +1822,7 @@
   LI.thralls = function* (b) {
     b.pose('cast', 'summon', b.w(1.1));
     bark(b, pick(b.def.lines.thralls), 2);
-    summon(b, 'knight', 2, { cap: 3, name: 'Thrall-Knight', color: COL.witch, burst: 'witchfire', sfx: 'bone_break', rise: true });
+    summon(b, 'knight', 2, { cap: 3, name: 'Thrall-Knight', color: COL.witch, burst: 'witchfire', sfx: 'bone_break', rise: true, dmgMul: 0.24 });
     yield b.w(1.3);
   };
   LI.drain = function* (b) {
@@ -1987,7 +1987,7 @@
         beam:     { weight: [1.5, 2.5, 3], cd: 8, run: IK.beam },
       },
       onPhase(b, ph) {
-        if (ph === 2) summon(b, 'penguin', 3, { cap: 6, color: COL.ice, burst: 'ice', sfx: 'wenk' });
+        if (ph === 2) summon(b, 'penguin', 3, { cap: 6, color: COL.ice, burst: 'ice', sfx: 'wenk', dmgMul: 0.4 });
         if (ph === 3) { frostFloor(b); b.bgTask('frost', IK.frostPatches(b)); b.bgTask('mutter', IK.mutter(b)); }
       },
       tick(b, dt) {
@@ -2067,7 +2067,7 @@
         pulse:     { weight: [2, 2, 2.5], cd: 8, run: LI.pulse },
       },
       onPhase(b, ph) {
-        if (ph === 2) summon(b, 'knight', 2, { cap: 3, name: 'Thrall-Knight', color: COL.witch, burst: 'witchfire', rise: true });
+        if (ph === 2) summon(b, 'knight', 2, { cap: 3, name: 'Thrall-Knight', color: COL.witch, burst: 'witchfire', rise: true, dmgMul: 0.24 });
         if (ph === 3) { greenField(b); b.bgTask('greenFire', LI.greenFire(b)); sfx('lich_laugh', { x: b.x, y: b.y, vol: 1 }); }
       },
       tick(b, dt) {
@@ -2110,7 +2110,8 @@
     // hpMul/dmgMul: global knobs. floorDmg: dmgUnit growth per floor past 3. addDmg/addHp: summoned minions are a
     // nuisance, not the main threat (they would otherwise be full floor-scaled monsters). zoneTick: one boss/monster
     // ground-zone tick per kind per target per this many seconds, however many puddles overlap.
-    tuning: { hpMul: 1, dmgMul: 1, floorDmg: 0.11, addDmg: 0.55, addHp: 0.7, zoneTick: 0.42 },
+    // bossDmg: per-boss dmgUnit multiplier (late bosses stack fire/shadow DoTs + homing volleys that armor does not soak).
+    tuning: { hpMul: 1, dmgMul: 1, floorDmg: 0.11, addDmg: 0.55, addHp: 0.7, zoneTick: 0.42, bossDmg: { iceKing: 0.65, flameKing: 0.5, lich: 0.62 } },
     ids: Object.keys(defs),
 
     // Create a boss and add it to Game.entities (don't Game.spawn() it again — a duplicate is dropped anyway).

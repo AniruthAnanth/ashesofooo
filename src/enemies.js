@@ -631,10 +631,23 @@
   // ==================================================================================================
   // Zones (persistent ground effects) — all drawn by HM.FX.drawZone(z) by kind.
   // ==================================================================================================
+  // Overlapping puddles never stack into a melt: a target takes at most one ground-zone tick per kind per
+  // HM.Bosses.tuning.zoneTick seconds (the same a._zoneTk ledger the boss zones use), however many overlap.
+  function zoneTickOk(a, key) {
+    const g = G(), t = g ? g.t : 0, m = a._zoneTk || (a._zoneTk = {});
+    const gap = (HM.Bosses && HM.Bosses.tuning && HM.Bosses.tuning.zoneTick) || 0.42;
+    const last = m[key]; if (last !== undefined && t - last < gap && t >= last) return false;
+    m[key] = t; return true;
+  }
   function fireZone(x, y, r, life, src, dps) {
     return CB().zone({
       x, y, r, life, team: 1, tick: 0.5, kind: 'fire', source: src, tags: ['fire'],
-      onTick(z, inside) { for (const a of inside) CB().damage(a, { amount: dps * 0.5, type: 'fire', source: z.source, isDot: true, canCrit: false, tags: ['zone'], status: { id: 'burn', dur: 1.5, dps: dps * 0.3 } }); },
+      onTick(z, inside) {
+        for (const a of inside) {
+          if (!zoneTickOk(a, 'fire')) continue;
+          CB().damage(a, { amount: dps * 0.5, type: 'fire', source: z.source, isDot: true, canCrit: false, tags: ['zone'], status: { id: 'burn', dur: 1.2, dps: dps * 0.25 } });
+        }
+      },
     });
   }
   function rotZone(x, y, r, life, src, dps, big) {
@@ -770,7 +783,7 @@
           look: a.look, color: a.color || [0.85, 0.92, 1], source: e, damage: null, ghost: true, pierce: 99,
           onExpire(p) {
             CB().hitCircle(p.x, p.y, a.splash, e.team, e.spec(a.mul, a.type, a.knock, a.status));
-            fx('burst', p.x, p.y, 4, a.burst || 'ice', 16); fx('ring', p.x, p.y, 4, a.splash, 0.25, a.ringColor || [0.75, 0.9, 1]);
+            fx('burst', p.x, p.y, 4, a.burst || 'ice', 16); fx('ring', p.x, p.y, 4, a.splash, 0.25, a.ringColor || [0.75, 0.9, 1]); fx('splash', p.x, p.y, 0.9);
             if (a.onLand) a.onLand(e, p, a);
             sfx(a.landSound || 'ice', p.x, p.y, 0.6);
           },
@@ -1032,7 +1045,7 @@
       tick(e, dt) {
         if (!e.engaged) return;
         e.trailT = (e.trailT || 2) - dt;
-        if (e.trailT <= 0 && Math.hypot(e.vx, e.vy) > 20) { e.trailT = rr(2.2, 3.2); fireZone(e.x, e.y, 18, 3, e, 4 * e.dmgK); fx('burst', e.x, e.y, 6, 'ember', 6); }
+        if (e.trailT <= 0 && Math.hypot(e.vx, e.vy) > 20) { e.trailT = rr(2.2, 3.2); fireZone(e.x, e.y, 18, 2.6, e, 3.2 * e.dmgK); fx('burst', e.x, e.y, 6, 'ember', 6); }
         if (rnd() < dt * 8) fx('burst', e.x, e.y, (e.z || 0) + 22, 'ember', 1);
       },
       onDeath(e) { fx('explosion', e.x, e.y, 34, 'fire'); fx('burst', e.x, e.y, 20, 'ember', 22); fireZone(e.x, e.y, 26, 2.5, e, 4 * e.dmgK); },
@@ -1209,6 +1222,7 @@
     info.amount = Math.min(info.amount, e.hp * 0.35);
     e.possessed = true; e.greenEyes = true; e.possT = 0; e.possPhase = 'laugh';
     e.name = e.baseName = 'The Possessed Snail'; e.invuln = true; e.vx = e.vy = 0;
+    e.neutral = false;   // now a real foe: assist / target frame may pick it up
     if (e.rig) e.rig.possessed = true;
     setPal(e, 'eye', GREEN_EYE);
     e.lightOverride = [90, 0.35, 1, 0.45, 0.9];
@@ -1259,7 +1273,7 @@
       name: 'Burning', color: [1, 0.5, 0.12], apply(e) { e.stats.res.fire = Math.max(e.stats.res.fire, 0.5); },
       tick(e, dt) {
         const T = e.affixT; T.burn = (T.burn || 0) - dt;
-        if (T.burn <= 0 && e.engaged && Math.hypot(e.vx, e.vy) > 15) { T.burn = 0.42; fireZone(e.x, e.y, 15, 2.6, e, 4 * e.dmgK); }
+        if (T.burn <= 0 && e.engaged && Math.hypot(e.vx, e.vy) > 15) { T.burn = 0.55; fireZone(e.x, e.y, 15, 2.2, e, 3 * e.dmgK); }
         if (rnd() < dt * 6) fx('burst', e.x, e.y, e.height * 0.6, 'ember', 1);
       },
     },

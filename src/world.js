@@ -1696,7 +1696,18 @@
         const tp = F.type[k], h = F.h1[k], h2 = F.h2[k], sh = F.shade[k], n1 = F.n1[k], i = k % cols, j = (k / cols) | 0, bt = bay(i, j);
         F.cls[k] = C_SKIP; F.g[k] = 0;
         if (tp === T.WATER || tp === T.DEEP) { if (id === 'fire') { F.cls[k] = C_LAVA; hasLava = true; } else { F.cls[k] = C_WATER; hasWater = true; } continue; }
-        if (tp === T.CHASM) { F.cls[k] = C_VOID; set(k, C_VOID, h < 0.5 ? G_DOT : G_COMMA, 0.12, 0.13, 0.12); continue; }
+        if (tp === T.CHASM) { // the void's lip: a worked-stone rim where the floor ends, the shaft wall dropping away below it
+          const nc = (kk) => F.type[kk] !== T.CHASM;
+          let du = 0; while (du < 8 && j - du - 1 >= 0 && !nc(k - (du + 1) * cols)) du++; // chasm rows above this one
+          const up = j > 0 && du === 0, lf = i > 0 && nc(k - 1), rt = i < cols - 1 && nc(k + 1), dn = j < F.rows - 1 && nc(k + cols);
+          const wallL = 2 + ((M.hash2(i, 41) * 6) | 0);
+          if (up) set(k, C_VOID, h < 0.6 ? G_UND : G_EQ, 0.5, 0.6, 0.52);
+          else if (lf || rt) set(k, C_VOID, h < 0.5 ? G_PIPE : G_COLON, 0.38, 0.46, 0.4);
+          else if (dn) set(k, C_VOID, h < 0.5 ? G_DOT : G_COMMA, 0.26, 0.32, 0.28);
+          else if (j - du - 1 >= 0 && du < wallL) { const f = du / wallL; set(k, C_VOID, h < 0.55 ? G_PIPE : h < 0.8 ? G_BANG : G_COLON, 0.3 * (1 - 0.6 * f), 0.42 * (1 - 0.6 * f), 0.32 * (1 - 0.6 * f), 1); }
+          else set(k, C_VOID, h < 0.5 ? G_DOT : G_COMMA, 0.12, 0.13, 0.12);
+          continue;
+        }
         if (id === 'grass') {
           if (tp === T.GRASS) {
             const cov = 0.8 + (sh - 0.5) * 0.9 + (n1 - 0.5) * 0.45; // thick and thin swathes, dithered
@@ -2224,16 +2235,19 @@
       const tone = (wn * 1.1 - 0.15) * (1 - dw / 120) * 0.85;
       if (tone > bt) { const wat = B.water || [0.1, 0.2, 0.4], v = 0.3 + 0.7 * tone; g = WDOT[(hh * 8) | 0]; r = wat[0] * v; gg = wat[1] * v; b = wat[2] * v; fl = 0; }
     } else if (et === T.CHASM || id === 'well') {
-      if (dw < 9 && et !== T.CHASM) { g = ns ? (hh < 0.55 ? G_UND : G_EQ) : (hh < 0.5 ? G_PIPE : G_COLON); const v = 0.5 + 0.25 * hh; r = 0.4 * v; gg = 0.4 * v; b = 0.37 * v; }
-      else if (dw < 90) { // witch-glow seeping up out of the void
+      if (dw < 11 && et !== T.CHASM) { // the worked-stone lip of the well shaft, moss-green in the witch-light
+        g = ns ? (hh < 0.55 ? G_UND : G_EQ) : (hh < 0.5 ? G_PIPE : G_COLON); const v = 0.8 + 0.35 * hh; r = 0.42 * v; gg = 0.52 * v; b = 0.44 * v;
+      } else if (south && dw < 70 && et !== T.CHASM && M.hash2(ci, 41) * 59 + 11 > dw) { // the shaft wall drops away below the lip
+        const f = (dw - 11) / 59; g = hh < 0.55 ? G_PIPE : hh < 0.8 ? G_BANG : G_COLON; const v = (0.62 - 0.45 * f) * (0.6 + 0.5 * M.hash2(ci, 43)); r = 0.26 * v; gg = 0.42 * v; b = 0.3 * v;
+      } else if (dw < 90) { // witch-glow seeping up out of the void
         const tone = 0.5 * (1 - dw / 90) * (0.6 + 0.4 * Math.sin(t * 1.3 + ci * 0.31 + cj * 0.53));
         if (tone > bt) { g = hh < 0.4 ? G_DOT : hh < 0.7 ? G_COMMA : G_APOS; const v = tone * 0.9; r = 0.3 * v; gg = 1.0 * v; b = 0.45 * v; fl = R.F_UNLIT; em = 0.3; }
       }
     } else if (id === 'grass') {
-      if (dw < 11) { g = ns ? (hh < 0.6 ? G_UND : G_EQ) : (hh < 0.5 ? G_PIPE : G_COLON); const v = 0.75 + 0.3 * hh; r = 0.26 * v; gg = 0.34 * v; b = 0.3 * v; }
+      if (dw < 11) { g = ns ? (hh < 0.6 ? G_UND : G_EQ) : (hh < 0.5 ? G_PIPE : G_COLON); const v = 0.95 + 0.4 * hh; r = 0.34 * v; gg = 0.42 * v; b = 0.36 * v; } // the cliff lip
       else if (south && dw < 96) { // the cliff face drops away below the lip: ragged rock striations sinking into darkness
         const stri = M.hash2(ci, 77), L = 18 + stri * 46 + M.hash2(ci >> 2, 78) * 26;
-        if (dw < L) { const f = (dw - 11) / Math.max(1, L - 11); g = f > 0.8 ? (hh < 0.5 ? G_APOS : G_COLON) : hh < 0.62 ? G_PIPE : hh < 0.85 ? G_BANG : G_COLON; const v = (0.5 - 0.32 * f) * (0.6 + 0.6 * M.hash2(ci, 79)); r = 0.3 * v; gg = 0.35 * v; b = 0.36 * v; }
+        if (dw < L) { const f = (dw - 11) / Math.max(1, L - 11); g = f > 0.8 ? (hh < 0.5 ? G_APOS : G_COLON) : hh < 0.62 ? G_PIPE : hh < 0.85 ? G_BANG : G_COLON; const v = (0.9 - 0.62 * f) * (0.6 + 0.6 * M.hash2(ci, 79)); r = 0.32 * v; gg = 0.37 * v; b = 0.38 * v; }
         else if (0.18 * (1 - (dw - L) / 40) > bt) { g = G_DOT; r = 0.08; gg = 0.1; b = 0.1; }
       } else if (!south && dw < 42) { // a ragged overhang: roots and grass tufts dropping off the lip
         const tone = 0.55 * (1 - (dw - 11) / 31);
@@ -2302,10 +2316,27 @@
       Gen.cells(F, rng);
       if (o.prologue) Layout.prologue(F, rng);
       else if (o.title) Layout.title(F, rng); else if (boss) Layout.arena(F, rng); else Layout.field(F, rng);
+      if (!o.prologue) World._makeWadeable(F); // the prologue pond gates a tutorial beat, so it stays a wall
       World.floor = F; World._prevOpen = false;
       World._resetRipples();
       return F;
     },
+
+    // ------------------------------------------------------------------ wading
+    // Water (not lava, not the void) is walkable: generation still treats it as a barrier (layout, spawns, nav),
+    // then plain liquid cells are opened up so actors can wade in. Props standing in water stay solid.
+    _makeWadeable(F) {
+      if (F.biomeId === 'fire') return;
+      const S = F.solid, ty = F.type, n = S.length;
+      for (let k = 0; k < n; k++) if (S[k] === S_LIQ && (ty[k] === T.WATER || ty[k] === T.DEEP)) S[k] = 0;
+      F.wadeable = true;
+    },
+    // 0 = dry, 1 = shallows (knee-deep), 2 = deep water (waist-deep)
+    wadeAt(x, y) {
+      const F = World.floor; if (!F || !F.wadeable) return 0;
+      const t = World._typeAt(F, x, y); return t === T.DEEP ? 2 : t === T.WATER ? 1 : 0;
+    },
+    wadeMul(x, y) { const w = World.wadeAt(x, y); return w === 2 ? 0.62 : w === 1 ? 0.82 : 1; },
 
     // ------------------------------------------------------------------ liquids & ripples (DESIGN §10)
     // true on (non-lava) water: the Grasslands sea and ponds, open water in the ice
@@ -2354,8 +2385,16 @@
           const moved = Math.abs(a.x - st.x) + Math.abs(a.y - st.y) > 0.4 * (dt * 60);
           st.x = a.x; st.y = a.y;
           if (!hit) continue;
-          const gap = moved ? 0.36 : 1.1;
-          if (t - st.t > gap) { st.t = t; World._spawnRipple(F, wx, wy, moved ? { strength: 0.8, speed: 55, life: 1.6, maxR: 72 } : { strength: 0.62, speed: 30, life: 2.6, maxR: 64 }); }
+          const wade = World.wadeAt(a.x, a.y), rolling = a.anim && a.anim.state === 'dodge';
+          if (wade && !st.w && moved) { World._spawnRipple(F, a.x, a.y, { strength: 1, speed: 120, life: 1.1, maxR: 80 }); HM.FX && HM.FX.splash && HM.FX.splash(a.x, a.y, 1.2); HM.Audio && HM.Audio.play && HM.Audio.play('dodge', { x: a.x, y: a.y, pitch: 0.6, vol: 0.5 }); }
+          st.w = !!wade;
+          if (wade) { wx = a.x; wy = a.y; }
+          const gap = rolling && wade ? 0.08 : wade && moved ? 0.2 : moved ? 0.36 : 1.1;
+          if (t - st.t > gap) {
+            st.t = t;
+            World._spawnRipple(F, wx, wy, rolling && wade ? { strength: 1, speed: 110, life: 1.0, maxR: 70 } : moved ? { strength: wade ? 0.95 : 0.8, speed: wade ? 70 : 55, life: 1.6, maxR: wade ? 84 : 72 } : { strength: 0.62, speed: 30, life: 2.6, maxR: 64 });
+            if (wade && moved && HM.FX && HM.FX.splash && (rolling || M.hash2(a.id | 0, (t * 10) | 0) < 0.45)) HM.FX.splash(a.x, a.y, rolling ? 1.1 : 0.45);
+          }
         }
         // stones / pillars / trees standing in the water: slow idle rings
         const wet = F.wetProps;
@@ -2588,20 +2627,8 @@
         const cj = cj0 + y, q = RO8 + y * 8, b1 = cj * 0.4, b2 = cj * 0.27, b3 = cj * 0.13, b4 = cj * 1.9;
         WQ[q] = Math.sin(b1); WQ[q + 1] = Math.cos(b1); WQ[q + 2] = Math.sin(b2); WQ[q + 3] = Math.cos(b2); WQ[q + 4] = Math.sin(b3); WQ[q + 5] = Math.cos(b3); WQ[q + 6] = Math.sin(b4); WQ[q + 7] = Math.cos(b4);
       }
-      // Moon reflection column: a screen-space band under the moon (top-right); the glitter inside it is world-anchored.
-      const MCt = World._mc && World._mc.length >= rows * 3 ? World._mc : (World._mc = new Float32Array(rows * 3 + 6));
-      const moonOn = (F.hasWater || F.biomeId === 'ice') && !F.noMoon;
-      if (moonOn) {
-        const cx = (R.originPx + R.viewW * 0.76) / CW, hw = (R.viewW * 0.075) / CW;
-        for (let y = 0; y < rows; y++) {
-          const cj = cj0 + y;
-          MCt[y * 3] = cx + Math.sin(cj * 0.23 + t * 0.6) * 1.6 + Math.sin(cj * 0.071 - t * 0.33) * 2.6;
-          MCt[y * 3 + 1] = 1 / (hw * (0.72 + 0.38 * Math.sin(cj * 0.13 - t * 0.41)));
-          MCt[y * 3 + 2] = 0.72 + 0.28 * Math.sin(cj * 0.09 + t * 0.27);
-        }
-      }
+      // (no moon column here: the renderer's mirror pass owns the moon disc, cloud and shore reflections on water cells)
       const wat = B.water || [0.1, 0.2, 0.4], foam = B.foam || [0.8, 0.9, 1], lava = B.lava || [1.5, 0.55, 0.08], crust = B.crust || [0.2, 0.07, 0.03];
-      const moon = B.moon || [0.86, 0.93, 1.12];
       const gLo = B.grassLo || [0.1, 0.2, 0.1], gHi = B.grassHi || [0.3, 0.5, 0.3], fl = B.fleck || [0.9, 0.9, 0.9];
       const moteS = (t * 3) | 0, poolSweep = t * 0.6, crackT = t * 2.1, iceF = F.biomeId === 'ice';
       for (let y = 0; y < rows; y++) {
@@ -2609,7 +2636,6 @@
         const rowK = cj * FC;
         const sb1 = W[RO + y * 4], cb1 = W[RO + y * 4 + 1], sb2 = W[RO + y * 4 + 2], cb2 = W[RO + y * 4 + 3];
         const dyOut = cj < 0 ? -cj : cj >= FR ? cj - FR + 1 : 0;
-        const mcx = MCt[y * 3], mci = MCt[y * 3 + 1], mcs = MCt[y * 3 + 2];
         const qy = RO8 + y * 8;
         for (let x = 0; x < cols; x++) {
           const ci = ci0 + x;
@@ -2650,46 +2676,33 @@
               r = gLo[0] + (gHi[0] - gLo[0]) * v; gg = gLo[1] + (gHi[1] - gLo[1]) * v; b = gLo[2] + (gHi[2] - gLo[2]) * v;
             }
           } else if (cl === C_WATER) {
-            // Night water (ya_demidov "Sinking into dither", night): a fine dot texture whose density follows the wave field,
-            // long thin drifting crest streaks, pulsing shore foam, deep water darker/sparser, a dark contact band around
-            // anything standing in it, and the moon's glitter column. Ripple rings are laid over it after this pass.
+            // Night mirror water (the reels' fishing scene): near-black, a sparse fine dot texture whose density follows a slow
+            // world-anchored wave field, a few long thin drifting crest streaks, pulsing shore foam, deep water darker and
+            // sparser, a dark contact band around anything standing in it. Ripple rings are laid over it after this pass;
+            // the renderer's mirror pass then adds the shore reflections, the moon disc and the clouds (and dims it further).
             const sd = fsd[k], h = fh1[k], q = x * 8;
             const w1 = WQ[q] * WQ[qy + 1] + WQ[q + 1] * WQ[qy], w2 = WQ[q + 2] * WQ[qy + 3] + WQ[q + 3] * WQ[qy + 2], w3 = WQ[q + 4] * WQ[qy + 5] + WQ[q + 5] * WQ[qy + 4];
             const nn = fn1[k];
-            let n = 0.5 + 0.26 * w1 + 0.16 * w2 + 0.08 * w3 + (nn - 0.5) * 0.36;
-            const deep = sd > 6 ? 0.58 : sd > 3 ? 0.8 : 1, contact = faux[k], bt = BAYER[((cj & 3) << 2) | (ci & 3)];
-            let mc = 0;
-            if (moonOn) { const dm = (ci - mcx) * mci; if (dm > -1 && dm < 1) mc = (1 - dm * dm) * mcs * (1 - contact); }
+            const n = 0.5 + 0.26 * w1 + 0.16 * w2 + 0.08 * w3 + (nn - 0.5) * 0.36;
+            const deep = sd > 7 ? 0.5 : sd > 3 ? 0.75 : 1, contact = faux[k], bt = BAYER[((cj & 3) << 2) | (ci & 3)];
             g = 0;
             if (sd <= 2) { // shore foam: a lacy line that laps in and out
               const ph = Math.sin(t * 1.5 - sd * 1.9 + ci * 0.07 + nn * 4);
-              if (((sd === 1 && ph > -0.45) || (sd === 2 && ph > 0.45)) && 0.5 + 0.5 * ph > bt * 0.8) {
-                g = GL.foam[(h * 37 + t * 2) % GL.foam.length | 0]; const v = 0.32 + 0.36 * (0.5 + 0.5 * ph) + (sd === 1 ? 0.08 : 0);
+              if (((sd === 1 && ph > -0.45) || (sd === 2 && ph > 0.5)) && 0.5 + 0.5 * ph > bt * 0.8) {
+                g = GL.foam[(h * 37 + t * 2) % GL.foam.length | 0]; const v = 0.3 + 0.34 * (0.5 + 0.5 * ph) + (sd === 1 ? 0.08 : 0);
                 r = foam[0] * v; gg = foam[1] * v; b = foam[2] * v;
               }
             }
-            if (!g && mc > 0.04) { // moon glitter: short bright dashes stacked in rows, breaking and recombining with the swell
-              const w4 = WQ[q + 6] * WQ[qy + 7] + WQ[q + 7] * WQ[qy + 6];
-              const dash = w4 * 0.62 + w1 * 0.26 + w3 * 0.22;
-              if (dash > 0.62 - mc * 1.25) {
-                const kk = mc * (0.7 + 0.5 * dash) * (0.7 + 0.3 * deep) * 1.25;
-                const gm = kk > 0.78 ? G_EQ : kk > 0.4 ? G_TILDE : G_DASH;
-                keyb[i] = key; glyph[i] = gm; col[o] = moon[0] * (0.35 + kk * 1.1); col[o + 1] = moon[1] * (0.35 + kk * 1.1); col[o + 2] = moon[2] * (0.35 + kk * 1.1); flag[i] = UNLIT; shd[i] = 0;
-                R.emitI(i, moon[0] * kk * 0.22, moon[1] * kk * 0.22, moon[2] * kk * 0.28);
-                continue;
-              }
-              n += mc * 0.3;
-            }
             if (!g) {
-              if (contact < 0.35 && w1 > 0.965 - 0.045 * w2 - (deep < 1 ? -0.02 : 0) && w3 + (nn - 0.5) * 1.4 > -0.25) { // crest streak
-                g = w2 > 0.35 ? G_TILDE : G_DASH;
-                const v = (0.62 + 0.25 * w2) * (0.65 + 0.35 * deep);
-                r = wat[0] * 1.5 * v + foam[0] * 0.3 * v; gg = wat[1] * 1.5 * v + foam[1] * 0.3 * v; b = wat[2] * 1.5 * v + foam[2] * 0.3 * v;
+              if (contact < 0.3 && w1 > 0.978 - 0.03 * w2 && w3 + (nn - 0.5) * 1.2 > 0.05) { // a long thin crest streak, drifting
+                g = w2 > 0.45 ? G_TILDE : G_DASH;
+                const v = (0.5 + 0.2 * w2) * (0.6 + 0.4 * deep);
+                r = wat[0] * 1.3 * v + foam[0] * 0.22 * v; gg = wat[1] * 1.3 * v + foam[1] * 0.22 * v; b = wat[2] * 1.3 * v + foam[2] * 0.22 * v;
               } else {
-                const dens = (0.22 + (n - 0.18) * 1.05 * (0.6 + 0.4 * deep)) * (1 - contact * 0.85); // never empty: deep water is sparser, not void
+                const dens = (0.06 + (n - 0.25) * 0.62 * (0.45 + 0.55 * deep)) * (1 - contact * 0.9); // sparse; deep water sparser still
                 if (dens <= bt) continue;
-                g = dens > 0.9 && h > 0.55 ? G_COLON : WDOT[(h * 8) | 0];
-                const v = (0.42 + 0.9 * dens) * (0.72 + 0.28 * deep) + mc * 0.5;
+                g = dens > 0.5 && h > 0.6 ? G_COLON : WDOT[(h * 8) | 0];
+                const v = (0.34 + 0.7 * dens) * (0.62 + 0.38 * deep);
                 r = wat[0] * v; gg = wat[1] * v; b = wat[2] * v;
               }
             }
@@ -2729,12 +2742,11 @@
           } else if (cl === C_POOL) {
             g = fg[k]; const q = k * 3;
             r = fc[q]; gg = fc[q + 1]; b = fc[q + 2];
-            if (iceF) { // frozen lake: a slow glint sweeps across; rare twinkles; the moon lays a faint sheen on the ice
+            if (iceF) { // frozen lake: a slow glint sweeps across; rare twinkles
               const s = Math.sin(ci * 0.045 - cj * 0.09 + poolSweep);
               if (s > 0.94) { const v = 1 + (s - 0.94) * 12; r *= v; gg *= v; b *= v; if (g) g = G_EQ; }
               const h2 = fh2[k];
               if (h2 < 0.012 && Math.sin(t * 2.1 + fh1[k] * 60) > 0.86) { g = h2 < 0.005 ? G_STAR : G_PLUS; r = 1.0; gg = 1.05; b = 1.15; R.emitI(i, 0.12, 0.13, 0.16); }
-              if (moonOn) { const dm = (ci - mcx) * mci; if (dm > -1 && dm < 1) { const mk = (1 - dm * dm) * mcs; if (!g && mk * 0.5 > BAYER[((cj & 3) << 2) | (ci & 3)]) g = G_DASH; r += moon[0] * mk * 0.25; gg += moon[1] * mk * 0.25; b += moon[2] * mk * 0.3; } }
             } else { // candy rot: bubbles swell and pop at fixed vents
               const h2 = fh2[k];
               if (h2 < 0.03) { const ph = (t * 0.45 + fh1[k] * 13) % 1; g = ph < 0.4 ? G_DOT : ph < 0.7 ? G_o : ph < 0.9 ? G_O : G_DEG; const v = 0.6 + ph * 0.6; r = 0.8 * v; gg = 0.35 * v; b = 0.55 * v; }
@@ -2742,7 +2754,7 @@
             }
             if (!g) continue;
           } else if (cl === C_VOID) {
-            if (fsd[k] <= 1) { g = fg[k]; const q = k * 3; r = fc[q]; gg = fc[q + 1]; b = fc[q + 2]; }
+            if (fsd[k] <= 1 || fe[k] > 0) { g = fg[k]; const q = k * 3; r = fc[q]; gg = fc[q + 1]; b = fc[q + 2]; } // lip / shaft wall
             else {
               const kk = ((cj + moteS) % FR) * FC + ci;
               const hm = fh2[kk];
